@@ -1,5 +1,5 @@
 {
-  "name": "FiltrFeed",
+  "name": "FocusFeed",
   "version": "0.3.4",
   "description": "A way to direct you to the good",
   "permissions": ["storage", "tabs", "activeTab", "scripting", "storage"],
@@ -20,7 +20,7 @@
 ],
   "action":{
     "default_icon": {},
-    "default_title": "FiltrFeed",
+    "default_title": "FocusFeed",
     "default_popup": "index.html"
   },
   "manifest_version" : 3
