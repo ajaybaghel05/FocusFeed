@@ -20,7 +20,7 @@ FocusFeed is a Chrome extension that helps learners stay focused on educational 
 
 1. Clone or download this repository:
    ```bash
-   git clone https://github.com/nybzmr/FocusFeed.git
+   git clone https://github.com/ajaybaghel05/FocusFeed.git
    ```
 2. Open [chrome://extensions](chrome://extensions) in your browser.  
 3. Enable **Developer Mode** (top right).  
