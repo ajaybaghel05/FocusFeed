@@ -433,12 +433,20 @@ async function apiCall(prompt) {
 
 
     const data = await response.json();
-    const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text.toLowerCase();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const generatedText = typeof rawText === 'string' ? rawText.toLowerCase() : "";
     console.log(generatedText)
+
+    if (!generatedText) {
+        return [];
+    }
+
     const match = generatedText.match(/\[.*\]/s);
     const array = match ? JSON.parse(match[0].replace(/false/g, 'false').replace(/true/g, 'true')) : [];
 
-    return array;
+    return Array.isArray(array)
+        ? array.map(value => value === true || value === 'true')
+        : [];
 }
 
 const cssURL = chrome.runtime.getURL("inject.css");
