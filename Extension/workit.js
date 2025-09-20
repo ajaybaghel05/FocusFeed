@@ -224,7 +224,7 @@ async function getTitles() {
                     Input:
                     ${showTitle}`);
 
-                console.log("Gemini Response: ", ans);
+                console.log("OpenRouter Response: ", ans);
                 for (let i = 0; i < elements.length; i++) {
                     if (!ans[i]) {
                         elements[i].style.display = "none";
@@ -335,7 +335,7 @@ async function getTitleCurrentVideo() {
                     Input:
                     ${sideTitles}`);
 
-                console.log("Gemini Response: ", ans);
+                console.log("OpenRouter Response: ", ans);
 
                 if (!ans[ans.length - 1]) {
                     window.location.href = "https://www.youtube.com/";
@@ -418,35 +418,126 @@ observer.observe(document.body, { childList: true, subtree: true });
 
 // -------------------_API SYSTEMS AND SHIT_----------------------------------------------------
 
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL = "x-ai/grok-4-fast:free";
+const OPENROUTER_FALLBACK_TITLE = "FocusFeed Extension";
+const OPENROUTER_API_KEY = "<YOUR_OPENROUTER_API_KEY>";
+
+function getOpenRouterConfig() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get([
+            "openRouterApiKey",
+            "openRouterReferer",
+            "openRouterTitle"
+        ], (result) => {
+            resolve({
+                apiKey: result.openRouterApiKey || OPENROUTER_API_KEY,
+                referer: result.openRouterReferer || "",
+                title: result.openRouterTitle || OPENROUTER_FALLBACK_TITLE
+            });
+        });
+    });
+}
+
 async function apiCall(prompt) {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAC6gdJAMwTlqLW8kUci6WJcGXduyGflz4", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{ text: prompt }]
-            }]
-        })
-    })
+    const { apiKey, referer, title } = await getOpenRouterConfig();
 
-
-    const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    const generatedText = typeof rawText === 'string' ? rawText.toLowerCase() : "";
-    console.log(generatedText)
-
-    if (!generatedText) {
+    if (!apiKey) {
+        console.warn("OpenRouter API key is missing. Please provide one via chrome.storage or by editing OPENROUTER_API_KEY.");
         return [];
     }
 
-    const match = generatedText.match(/\[.*\]/s);
-    const array = match ? JSON.parse(match[0].replace(/false/g, 'false').replace(/true/g, 'true')) : [];
+    const headers = {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+    };
 
-    return Array.isArray(array)
-        ? array.map(value => value === true || value === 'true')
-        : [];
+    if (referer) {
+        headers["HTTP-Referer"] = referer;
+    }
+
+    if (title) {
+        headers["X-Title"] = title;
+    }
+
+    try {
+        const response = await fetch(OPENROUTER_API_URL, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                model: OPENROUTER_MODEL,
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            {
+                                type: "text",
+                                text: prompt
+                            }
+                        ]
+                    }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            console.error("OpenRouter request failed:", response.status, response.statusText);
+            return [];
+        }
+
+        const data = await response.json();
+        const messageContent = data?.choices?.[0]?.message?.content;
+        const combinedText = Array.isArray(messageContent)
+            ? messageContent.map((part) => part?.text ?? "").join(" ").trim()
+            : typeof messageContent === "string"
+                ? messageContent
+                : "";
+
+        if (!combinedText) {
+            return [];
+        }
+
+        const match = combinedText.match(/\[[^\]]*\]/s);
+        if (!match) {
+            console.error("OpenRouter response did not include a parsable array:", combinedText);
+            return [];
+        }
+
+        const parsedValues = parseBooleanArrayFromText(match[0]);
+        if (parsedValues.length === 0) {
+            console.error("Failed to parse OpenRouter response:", combinedText);
+        }
+
+        return parsedValues;
+    } catch (error) {
+        console.error("OpenRouter request error:", error);
+        return [];
+    }
+}
+
+function parseBooleanArrayFromText(text) {
+    const normalizationPipelines = [
+        (value) => value,
+        (value) => value.replace(/'/g, '"'),
+        (value) => value
+            .replace(/'/g, '"')
+            .replace(/\bTrue\b/gi, "true")
+            .replace(/\bFalse\b/gi, "false")
+    ];
+
+    for (const normalize of normalizationPipelines) {
+        const candidate = normalize(text);
+        try {
+            const parsed = JSON.parse(candidate);
+            if (Array.isArray(parsed)) {
+                return parsed.map((value) => value === true || value === "true");
+            }
+        } catch (error) {
+            // Try the next normalization strategy.
+        }
+    }
+
+    return [];
 }
 
 const cssURL = chrome.runtime.getURL("inject.css");
